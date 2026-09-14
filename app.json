@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Plannr (MVP)",
+    "slug": "plannr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.placeholder.plannr"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.placeholder.plannr",
+      "permissions": []
+    },
+    "web": {
+      "bundler": "metro",
+      "name": "Plannr — Coursework & Exam Study Planner",
+      "shortName": "Plannr",
+      "themeColor": "#4F46E5",
+      "backgroundColor": "#F8FAFC",
+      "display": "standalone"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
