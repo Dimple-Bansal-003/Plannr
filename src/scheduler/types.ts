@@ -25,6 +25,7 @@ export interface Task {
   createdAt: string;
   taskType?: 'coursework' | 'daily_practice';
   preferredSlot?: SlotPreference;
+  slotOrder?: number; // 1 = Slot 1, 2 = Slot 2, ..., 99 = Last Slot (wind-down)
   completedDates?: string[]; // Date strings (YYYY-MM-DD) when this daily practice was completed
 }
 

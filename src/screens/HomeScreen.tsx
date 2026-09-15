@@ -12,6 +12,7 @@ import { useApp } from '../context/AppContext';
 import { TodayView } from './TodayView';
 import { WeeklyView } from './WeeklyView';
 import { AddTaskModal } from './AddTaskModal';
+import { AddDailyHabitModal } from './AddDailyHabitModal';
 import { WeeklyTemplateGrid } from '../components/WeeklyTemplateGrid';
 import { UnscheduledBanner } from '../components/UnscheduledBanner';
 import { Task } from '../scheduler/types';
@@ -34,6 +35,8 @@ export const HomeScreen: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('today');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [dailyHabitModalVisible, setDailyHabitModalVisible] = useState<boolean>(false);
+  const [addChooserVisible, setAddChooserVisible] = useState<boolean>(false);
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
 
@@ -48,6 +51,8 @@ export const HomeScreen: React.FC = () => {
 
   const incompleteTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
+  const dailyHabits = incompleteTasks.filter((t) => t.taskType === 'daily_practice');
+  const courseworkTasks = incompleteTasks.filter((t) => t.taskType !== 'daily_practice');
 
   const scheduledTaskIds = new Set(schedule?.sessions.map((s) => s.taskId) || []);
   const atRiskTaskIds = new Set(schedule?.atRiskTasks.map((ar) => ar.taskId) || []);
@@ -137,6 +142,7 @@ export const HomeScreen: React.FC = () => {
         {activeTab === 'today' && (
           <TodayView
             onOpenAddTask={() => setModalVisible(true)}
+            onOpenAddDailyHabit={() => setDailyHabitModalVisible(true)}
             onNavigateWeekly={() => setActiveTab('weekly')}
           />
         )}
@@ -153,159 +159,204 @@ export const HomeScreen: React.FC = () => {
               <UnscheduledBanner onRecalculate={handleRecalculate} />
             )}
 
-            {incompleteTasks.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyIcon}>📝</Text>
-                <Text style={styles.emptyTitle}>No tasks added yet</Text>
-                <Text style={styles.emptyDesc}>
-                  Add your coursework assignments, problem sets, or exams to generate a proposed schedule.
+            {/* Top Quick Actions Bar */}
+            <View style={styles.tasksTopActionBar}>
+              <TouchableOpacity
+                style={styles.actionBtnCoursework}
+                onPress={() => setModalVisible(true)}
+              >
+                <Text style={styles.actionBtnCourseworkText}>🎓 + Add Coursework</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionBtnDaily}
+                onPress={() => setDailyHabitModalVisible(true)}
+              >
+                <Text style={styles.actionBtnDailyText}>🔁 + Add Everyday Task</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 1. Dedicated Everyday Practice Habits Section */}
+            <View style={styles.subSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeading}>
+                  🔁 Everyday Practice Habits ({dailyHabits.length})
                 </Text>
                 <TouchableOpacity
-                  style={styles.emptyBtn}
-                  onPress={() => setModalVisible(true)}
+                  style={styles.miniAddHabitBtn}
+                  onPress={() => setDailyHabitModalVisible(true)}
                 >
-                  <Text style={styles.emptyBtnText}>+ Add First Task</Text>
+                  <Text style={styles.miniAddHabitBtnText}>+ Add Everyday Task</Text>
                 </TouchableOpacity>
               </View>
-            ) : (
-              <View>
-                {/* 1. Daily Practice Habits */}
-                {incompleteTasks.some((t) => t.taskType === 'daily_practice') && (
-                  <View style={styles.subSection}>
-                    <Text style={styles.sectionHeading}>
-                      🔁 Daily Practice Habits ({incompleteTasks.filter((t) => t.taskType === 'daily_practice').length})
-                    </Text>
-                    {incompleteTasks
-                      .filter((t) => t.taskType === 'daily_practice')
-                      .map((task) => {
-                        const todayKey = new Date().toISOString().split('T')[0];
-                        const isDoneToday = task.completedDates?.includes(todayKey);
-                        const slotName =
-                          task.preferredSlot === 'warmup'
-                            ? '🌅 Warm-up First'
-                            : task.preferredSlot === 'peak'
-                            ? '🎯 Peak Focus'
-                            : '🌙 Wind-down Slot';
 
-                        return (
-                          <View key={task.id} style={[styles.taskCard, isDoneToday && styles.taskCardDone]}>
-                            <View style={styles.taskCardTop}>
-                              <TouchableOpacity
-                                style={[styles.taskCheckbox, isDoneToday && styles.taskCheckboxDone]}
-                                onPress={() => toggleTaskCompleted(task.id, todayKey)}
-                              >
-                                <Text style={isDoneToday ? styles.taskCheckboxCompletedText : styles.taskCheckboxText}>
-                                  {isDoneToday ? '✓' : '○'}
-                                </Text>
-                              </TouchableOpacity>
-
-                              <View style={styles.taskInfo}>
-                                <Text style={[styles.taskTitle, isDoneToday && styles.taskTitleDone]}>
-                                  {task.title}
-                                </Text>
-                                <Text style={styles.taskDeadline}>
-                                  {isDoneToday ? '✓ Completed for today' : '• Scheduled daily in your free time'}
-                                </Text>
-                              </View>
-
-                              <TouchableOpacity
-                                style={styles.deleteBtn}
-                                onPress={() => deleteTask(task.id)}
-                              >
-                                <Text style={styles.deleteBtnText}>✕</Text>
-                              </TouchableOpacity>
-                            </View>
-
-                            <View style={styles.taskBadgesRow}>
-                              <View style={styles.badgePillDaily}>
-                                <Text style={styles.badgePillDailyText}>⏱ {task.effort} daily</Text>
-                              </View>
-
-                              <View style={styles.badgePillSlot}>
-                                <Text style={styles.badgePillSlotText}>{slotName}</Text>
-                              </View>
-
-                              {isDoneToday && (
-                                <View style={styles.badgePillSuccess}>
-                                  <Text style={styles.badgePillSuccessText}>Done Today</Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
+              {dailyHabits.length === 0 ? (
+                <View style={styles.emptyHabitCard}>
+                  <View style={styles.emptyHabitHeader}>
+                    <Text style={styles.emptyHabitIcon}>🔁</Text>
+                    <Text style={styles.emptyHabitTitle}>Everyday Practice & Habits</Text>
                   </View>
-                )}
+                  <Text style={styles.emptyHabitDesc}>
+                    Have a task you need to do every single day (like 30m LeetCode, language, or reading)? Set it up once and Plannr will automatically assign it to a fixed slot every day across your 14-day horizon. No manual daily entry required.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyHabitBtn}
+                    onPress={() => setDailyHabitModalVisible(true)}
+                  >
+                    <Text style={styles.emptyHabitBtnText}>+ Set Up Everyday Task</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                dailyHabits.map((task) => {
+                  const todayKey = new Date().toISOString().split('T')[0];
+                  const isDoneToday = task.completedDates?.includes(todayKey);
+                  const slotName =
+                    task.preferredSlot === 'warmup'
+                      ? `🌅 Slot ${task.slotOrder || 1}: Warm-Up Flow`
+                      : task.preferredSlot === 'peak'
+                      ? `🎯 Slot ${task.slotOrder || 2}: Peak Focus`
+                      : task.preferredSlot === 'winddown'
+                      ? '🌙 Wind-Down Slot'
+                      : `⚡ Slot ${task.slotOrder || 1}`;
 
-                {/* 2. Coursework Deadlines */}
-                {incompleteTasks.some((t) => t.taskType !== 'daily_practice') && (
-                  <View style={styles.subSection}>
-                    <Text style={styles.sectionHeading}>
-                      🎓 Coursework Deadlines ({incompleteTasks.filter((t) => t.taskType !== 'daily_practice').length})
-                    </Text>
-                    {incompleteTasks
-                      .filter((t) => t.taskType !== 'daily_practice')
-                      .map((task) => {
-                        const status = getTaskStatus(task);
-                        const deadlineDate = new Date(task.deadline);
-                        const formattedDate = deadlineDate.toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        });
-                        const formattedTime = deadlineDate.toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        });
+                  return (
+                    <View key={task.id} style={[styles.taskCard, isDoneToday && styles.taskCardDone]}>
+                      <View style={styles.taskCardTop}>
+                        <TouchableOpacity
+                          style={[styles.taskCheckbox, isDoneToday && styles.taskCheckboxDone]}
+                          onPress={() => toggleTaskCompleted(task.id, todayKey)}
+                        >
+                          <Text style={isDoneToday ? styles.taskCheckboxCompletedText : styles.taskCheckboxText}>
+                            {isDoneToday ? '✓' : '○'}
+                          </Text>
+                        </TouchableOpacity>
 
-                        return (
-                          <View key={task.id} style={styles.taskCard}>
-                            <View style={styles.taskCardTop}>
-                              <TouchableOpacity
-                                style={styles.taskCheckbox}
-                                onPress={() => toggleTaskCompleted(task.id)}
-                              >
-                                <Text style={styles.taskCheckboxText}>○</Text>
-                              </TouchableOpacity>
+                        <View style={styles.taskInfo}>
+                          <Text style={[styles.taskTitle, isDoneToday && styles.taskTitleDone]}>
+                            {task.title}
+                          </Text>
+                          <Text style={styles.taskDeadline}>
+                            {isDoneToday ? '✓ Completed for today' : '• Scheduled daily in your free time'}
+                          </Text>
+                        </View>
 
-                              <View style={styles.taskInfo}>
-                                <Text style={styles.taskTitle}>{task.title}</Text>
-                                <Text style={styles.taskDeadline}>
-                                  Due: {formattedDate} at {formattedTime}
-                                </Text>
-                              </View>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => deleteTask(task.id)}
+                        >
+                          <Text style={styles.deleteBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
 
-                              <TouchableOpacity
-                                style={styles.deleteBtn}
-                                onPress={() => deleteTask(task.id)}
-                              >
-                                <Text style={styles.deleteBtnText}>✕</Text>
-                              </TouchableOpacity>
-                            </View>
+                      <View style={styles.taskBadgesRow}>
+                        <View style={styles.badgePillDaily}>
+                          <Text style={styles.badgePillDailyText}>⏱ {task.effort} daily</Text>
+                        </View>
 
-                            <View style={styles.taskBadgesRow}>
-                              <View style={[styles.badgePill, { backgroundColor: status.bg }]}>
-                                <Text style={[styles.badgePillText, { color: status.color }]}>
-                                  {status.label}
-                                </Text>
-                              </View>
+                        <View style={styles.badgePillSlot}>
+                          <Text style={styles.badgePillSlotText}>{slotName}</Text>
+                        </View>
 
-                              <View style={styles.badgePillGray}>
-                                <Text style={styles.badgePillTextGray}>⏱ {task.effort}</Text>
-                              </View>
-
-                              <View style={styles.badgePillGray}>
-                                <Text style={styles.badgePillTextGray}>
-                                  ★ {task.importance}/5 Weight
-                                </Text>
-                              </View>
-                            </View>
+                        {isDoneToday && (
+                          <View style={styles.badgePillSuccess}>
+                            <Text style={styles.badgePillSuccessText}>Done Today</Text>
                           </View>
-                        );
-                      })}
-                  </View>
-                )}
+                        )}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            {/* 2. Coursework Deadlines Section */}
+            <View style={styles.subSection}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeading}>
+                  🎓 Coursework Deadlines ({courseworkTasks.length})
+                </Text>
+                <TouchableOpacity
+                  style={styles.miniAddCourseworkBtn}
+                  onPress={() => setModalVisible(true)}
+                >
+                  <Text style={styles.miniAddCourseworkBtnText}>+ Add Coursework</Text>
+                </TouchableOpacity>
               </View>
-            )}
+
+              {courseworkTasks.length === 0 ? (
+                <View style={styles.emptyCourseworkCard}>
+                  <Text style={styles.emptyCourseworkIcon}>🎓</Text>
+                  <Text style={styles.emptyCourseworkTitle}>No Coursework Deadlines</Text>
+                  <Text style={styles.emptyCourseworkDesc}>
+                    Add assignments, lab reports, or exam prep to get an honest study schedule packed into your free time.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyCourseworkBtn}
+                    onPress={() => setModalVisible(true)}
+                  >
+                    <Text style={styles.emptyCourseworkBtnText}>+ Add Coursework</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                courseworkTasks.map((task) => {
+                  const status = getTaskStatus(task);
+                  const deadlineDate = new Date(task.deadline);
+                  const formattedDate = deadlineDate.toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                  });
+                  const formattedTime = deadlineDate.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  });
+
+                  return (
+                    <View key={task.id} style={styles.taskCard}>
+                      <View style={styles.taskCardTop}>
+                        <TouchableOpacity
+                          style={styles.taskCheckbox}
+                          onPress={() => toggleTaskCompleted(task.id)}
+                        >
+                          <Text style={styles.taskCheckboxText}>○</Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.taskInfo}>
+                          <Text style={styles.taskTitle}>{task.title}</Text>
+                          <Text style={styles.taskDeadline}>
+                            Due: {formattedDate} at {formattedTime}
+                          </Text>
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => deleteTask(task.id)}
+                        >
+                          <Text style={styles.deleteBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.taskBadgesRow}>
+                        <View style={[styles.badgePill, { backgroundColor: status.bg }]}>
+                          <Text style={[styles.badgePillText, { color: status.color }]}>
+                            {status.label}
+                          </Text>
+                        </View>
+
+                        <View style={styles.badgePillGray}>
+                          <Text style={styles.badgePillTextGray}>⏱ {task.effort}</Text>
+                        </View>
+
+                        <View style={styles.badgePillGray}>
+                          <Text style={styles.badgePillTextGray}>
+                            ★ {task.importance}/5 Weight
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
 
             {/* Completed Section */}
             {completedTasks.length > 0 && (
@@ -351,21 +402,96 @@ export const HomeScreen: React.FC = () => {
         )}
       </View>
 
-      {/* Floating Action Button (+ Add Task) on Today, Weekly, and Tasks */}
+      {/* Floating Action Button (+ Add) on Today, Weekly, and Tasks */}
       {(activeTab === 'today' || activeTab === 'weekly' || activeTab === 'tasks') && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => setModalVisible(true)}
+          onPress={() => setAddChooserVisible(true)}
         >
-          <Text style={styles.fabText}>+ Add Task</Text>
+          <Text style={styles.fabText}>+ Add</Text>
         </TouchableOpacity>
       )}
 
-      {/* Add Task Modal */}
+      {/* Add Item Chooser Modal */}
+      <Modal
+        visible={addChooserVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setAddChooserVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.chooserOverlay}
+          activeOpacity={1}
+          onPress={() => setAddChooserVisible(false)}
+        >
+          <View style={styles.chooserCard}>
+            <View style={styles.chooserHeader}>
+              <Text style={styles.chooserTitle}>What would you like to schedule?</Text>
+              <TouchableOpacity
+                onPress={() => setAddChooserVisible(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.chooserOptionCard}
+              onPress={() => {
+                setAddChooserVisible(false);
+                setDailyHabitModalVisible(true);
+              }}
+            >
+              <View style={styles.chooserOptionIconBoxDaily}>
+                <Text style={styles.chooserOptionIcon}>🔁</Text>
+              </View>
+              <View style={styles.chooserOptionTextCol}>
+                <View style={styles.chooserOptionHeadingRow}>
+                  <Text style={styles.chooserOptionTitle}>Everyday Practice / Habit</Text>
+                  <View style={styles.badgeNew}>
+                    <Text style={styles.badgeNewText}>Everyday</Text>
+                  </View>
+                </View>
+                <Text style={styles.chooserOptionDesc}>
+                  Recurring practice (e.g. 30m LeetCode, language, or reading). Automatically reserves a fixed slot every single day across your 14-day horizon without re-entering.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.chooserOptionCard}
+              onPress={() => {
+                setAddChooserVisible(false);
+                setModalVisible(true);
+              }}
+            >
+              <View style={styles.chooserOptionIconBoxCoursework}>
+                <Text style={styles.chooserOptionIcon}>🎓</Text>
+              </View>
+              <View style={styles.chooserOptionTextCol}>
+                <Text style={styles.chooserOptionTitle}>Coursework Deadline</Text>
+                <Text style={styles.chooserOptionDesc}>
+                  One-off academic deadlines (assignments, lab reports, essays, exam study) with specific due dates and syllabus weightage.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Add Coursework Task Modal */}
       <AddTaskModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         onSaveTask={(task, recalculate) => addTask(task, recalculate)}
+      />
+
+      {/* Add Everyday Habit Modal */}
+      <AddDailyHabitModal
+        visible={dailyHabitModalVisible}
+        onClose={() => setDailyHabitModalVisible(false)}
+        onSaveTask={(task, recalculate) => addTask(task, recalculate)}
+        existingDailyTasks={dailyHabits}
       />
 
       {/* Settings & Trust Modal */}
@@ -872,5 +998,227 @@ const styles = StyleSheet.create({
   },
   settingsModalBody: {
     padding: 20,
+  },
+  tasksTopActionBar: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  actionBtnCoursework: {
+    flex: 1,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionBtnCourseworkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  actionBtnDaily: {
+    flex: 1,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionBtnDailyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6D28D9',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  miniAddHabitBtn: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniAddHabitBtnText: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  miniAddCourseworkBtn: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  miniAddCourseworkBtnText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyHabitCard: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    marginBottom: 10,
+  },
+  emptyHabitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  emptyHabitIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  emptyHabitTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#5B21B6',
+  },
+  emptyHabitDesc: {
+    fontSize: 13,
+    color: '#6D28D9',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  emptyHabitBtn: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  emptyHabitBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  emptyCourseworkCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  emptyCourseworkIcon: {
+    fontSize: 24,
+    marginBottom: 6,
+  },
+  emptyCourseworkTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 4,
+  },
+  emptyCourseworkDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  emptyCourseworkBtn: {
+    backgroundColor: '#4F46E5',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  emptyCourseworkBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  chooserOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'flex-end',
+  },
+  chooserCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: 36,
+    gap: 12,
+  },
+  chooserHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  chooserTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  chooserOptionCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+  },
+  chooserOptionIconBoxDaily: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EDE9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  chooserOptionIconBoxCoursework: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  chooserOptionIcon: {
+    fontSize: 20,
+  },
+  chooserOptionTextCol: {
+    flex: 1,
+  },
+  chooserOptionHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  chooserOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  badgeNew: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  badgeNewText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  chooserOptionDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
   },
 });

@@ -118,11 +118,15 @@ export function computeSchedule(options: ScheduleOptions): ScheduleResult {
   }
 
   // 4b. Allocate recurring Daily Practice tasks across horizon days
-  const warmupTasks = dailyPracticeTasks.filter((t) => (t.preferredSlot || 'warmup') === 'warmup');
-  const winddownTasks = dailyPracticeTasks.filter((t) => t.preferredSlot === 'winddown');
-  const otherDailyTasks = dailyPracticeTasks.filter(
-    (t) => t.preferredSlot === 'peak' || t.preferredSlot === 'any'
-  );
+  const warmupTasks = dailyPracticeTasks
+    .filter((t) => (t.preferredSlot || 'warmup') === 'warmup')
+    .sort((a, b) => (a.slotOrder || 1) - (b.slotOrder || 1));
+  const winddownTasks = dailyPracticeTasks
+    .filter((t) => t.preferredSlot === 'winddown')
+    .sort((a, b) => (a.slotOrder || 99) - (b.slotOrder || 99));
+  const otherDailyTasks = dailyPracticeTasks
+    .filter((t) => t.preferredSlot === 'peak' || t.preferredSlot === 'any')
+    .sort((a, b) => (a.slotOrder || 2) - (b.slotOrder || 2));
 
   for (let d = 0; d < horizonDays; d++) {
     const dayStart = new Date(currentNow.getFullYear(), currentNow.getMonth(), currentNow.getDate() + d, 0, 0, 0, 0);

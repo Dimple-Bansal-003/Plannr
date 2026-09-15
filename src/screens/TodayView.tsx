@@ -15,11 +15,13 @@ import { ScheduledSession } from '../scheduler/types';
 
 interface TodayViewProps {
   onOpenAddTask: () => void;
+  onOpenAddDailyHabit?: () => void;
   onNavigateWeekly: () => void;
 }
 
 export const TodayView: React.FC<TodayViewProps> = ({
   onOpenAddTask,
+  onOpenAddDailyHabit,
   onNavigateWeekly,
 }) => {
   const {
@@ -102,6 +104,18 @@ export const TodayView: React.FC<TodayViewProps> = ({
         )}
       </View>
 
+      {/* Quick Add Row */}
+      <View style={styles.todayQuickRow}>
+        <TouchableOpacity style={styles.todayQuickBtnCoursework} onPress={onOpenAddTask}>
+          <Text style={styles.todayQuickBtnCourseworkText}>+ Coursework</Text>
+        </TouchableOpacity>
+        {onOpenAddDailyHabit && (
+          <TouchableOpacity style={styles.todayQuickBtnDaily} onPress={onOpenAddDailyHabit}>
+            <Text style={styles.todayQuickBtnDailyText}>🔁 + Everyday Habit</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Sessions List */}
       {todaySessions.length === 0 ? (
         <View style={styles.emptyState}>
@@ -112,8 +126,13 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </Text>
           <View style={styles.emptyButtonRow}>
             <TouchableOpacity style={styles.emptyBtn} onPress={onOpenAddTask}>
-              <Text style={styles.emptyBtnText}>+ Add Coursework</Text>
+              <Text style={styles.emptyBtnText}>+ Coursework</Text>
             </TouchableOpacity>
+            {onOpenAddDailyHabit && (
+              <TouchableOpacity style={styles.emptyBtnHabit} onPress={onOpenAddDailyHabit}>
+                <Text style={styles.emptyBtnHabitText}>🔁 + Everyday Task</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.emptyBtnSecondary} onPress={onNavigateWeekly}>
               <Text style={styles.emptyBtnSecondaryText}>View Week →</Text>
             </TouchableOpacity>
@@ -264,5 +283,49 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontWeight: '600',
     fontSize: 13,
+  },
+  emptyBtnHabit: {
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  emptyBtnHabitText: {
+    color: '#4338CA',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  todayQuickRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  todayQuickBtnCoursework: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  todayQuickBtnCourseworkText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  todayQuickBtnDaily: {
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  todayQuickBtnDailyText: {
+    color: '#6D28D9',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
