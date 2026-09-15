@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Modal,
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { TodayView } from './TodayView';
@@ -15,7 +16,7 @@ import { WeeklyTemplateGrid } from '../components/WeeklyTemplateGrid';
 import { UnscheduledBanner } from '../components/UnscheduledBanner';
 import { Task } from '../scheduler/types';
 
-type TabKey = 'today' | 'weekly' | 'tasks' | 'template' | 'settings';
+type TabKey = 'today' | 'weekly' | 'tasks' | 'template';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -33,6 +34,7 @@ export const HomeScreen: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<TabKey>('today');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
 
   const handleRecalculate = async () => {
@@ -69,20 +71,28 @@ export const HomeScreen: React.FC = () => {
       <View style={styles.header}>
         <View>
           <Text style={styles.appTitle}>Plannr <Text style={styles.appTitleMvp}>(MVP)</Text></Text>
-          <Text style={styles.appSubtitle}>Deterministic Coursework Scheduler</Text>
+          <Text style={styles.appSubtitle}>Deterministic Study Planner</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.recalcBtn, isCalculating && styles.recalcBtnDisabled]}
-          onPress={handleRecalculate}
-          disabled={isCalculating}
-        >
-          <Text style={styles.recalcBtnText}>
-            {isCalculating ? 'Planning...' : '↻ Recalculate'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={[styles.recalcBtn, isCalculating && styles.recalcBtnDisabled]}
+            onPress={handleRecalculate}
+            disabled={isCalculating}
+          >
+            <Text style={styles.recalcBtnText}>
+              {isCalculating ? 'Planning...' : '↻ Recalculate'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsHeaderBtn}
+            onPress={() => setSettingsVisible(true)}
+          >
+            <Text style={styles.settingsHeaderIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Main Tab Navigation Bar */}
+      {/* Main Tab Navigation Bar (Clean 4-Tab Architecture) */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'today' && styles.tabItemActive]}
@@ -107,7 +117,7 @@ export const HomeScreen: React.FC = () => {
           onPress={() => setActiveTab('tasks')}
         >
           <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>
-            Tasks ({incompleteTasks.length})
+            Tasks & Habits ({incompleteTasks.length})
           </Text>
         </TouchableOpacity>
 
@@ -117,15 +127,6 @@ export const HomeScreen: React.FC = () => {
         >
           <Text style={[styles.tabText, activeTab === 'template' && styles.tabTextActive]}>
             Free Time
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'settings' && styles.tabItemActive]}
-          onPress={() => setActiveTab('settings')}
-        >
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.tabTextActive]}>
-            Settings
           </Text>
         </TouchableOpacity>
       </View>
@@ -168,64 +169,141 @@ export const HomeScreen: React.FC = () => {
               </View>
             ) : (
               <View>
-                <Text style={styles.sectionHeading}>Upcoming Deadlines ({incompleteTasks.length})</Text>
-                {incompleteTasks.map((task) => {
-                  const status = getTaskStatus(task);
-                  const deadlineDate = new Date(task.deadline);
-                  const formattedDate = deadlineDate.toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                  });
-                  const formattedTime = deadlineDate.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  });
+                {/* 1. Daily Practice Habits */}
+                {incompleteTasks.some((t) => t.taskType === 'daily_practice') && (
+                  <View style={styles.subSection}>
+                    <Text style={styles.sectionHeading}>
+                      🔁 Daily Practice Habits ({incompleteTasks.filter((t) => t.taskType === 'daily_practice').length})
+                    </Text>
+                    {incompleteTasks
+                      .filter((t) => t.taskType === 'daily_practice')
+                      .map((task) => {
+                        const todayKey = new Date().toISOString().split('T')[0];
+                        const isDoneToday = task.completedDates?.includes(todayKey);
+                        const slotName =
+                          task.preferredSlot === 'warmup'
+                            ? '🌅 Warm-up First'
+                            : task.preferredSlot === 'peak'
+                            ? '🎯 Peak Focus'
+                            : '🌙 Wind-down Slot';
 
-                  return (
-                    <View key={task.id} style={styles.taskCard}>
-                      <View style={styles.taskCardTop}>
-                        <TouchableOpacity
-                          style={styles.taskCheckbox}
-                          onPress={() => toggleTaskCompleted(task.id)}
-                        >
-                          <Text style={styles.taskCheckboxText}>○</Text>
-                        </TouchableOpacity>
+                        return (
+                          <View key={task.id} style={[styles.taskCard, isDoneToday && styles.taskCardDone]}>
+                            <View style={styles.taskCardTop}>
+                              <TouchableOpacity
+                                style={[styles.taskCheckbox, isDoneToday && styles.taskCheckboxDone]}
+                                onPress={() => toggleTaskCompleted(task.id, todayKey)}
+                              >
+                                <Text style={isDoneToday ? styles.taskCheckboxCompletedText : styles.taskCheckboxText}>
+                                  {isDoneToday ? '✓' : '○'}
+                                </Text>
+                              </TouchableOpacity>
 
-                        <View style={styles.taskInfo}>
-                          <Text style={styles.taskTitle}>{task.title}</Text>
-                          <Text style={styles.taskDeadline}>
-                            Due: {formattedDate} at {formattedTime}
-                          </Text>
-                        </View>
+                              <View style={styles.taskInfo}>
+                                <Text style={[styles.taskTitle, isDoneToday && styles.taskTitleDone]}>
+                                  {task.title}
+                                </Text>
+                                <Text style={styles.taskDeadline}>
+                                  {isDoneToday ? '✓ Completed for today' : '• Scheduled daily in your free time'}
+                                </Text>
+                              </View>
 
-                        <TouchableOpacity
-                          style={styles.deleteBtn}
-                          onPress={() => deleteTask(task.id)}
-                        >
-                          <Text style={styles.deleteBtnText}>✕</Text>
-                        </TouchableOpacity>
-                      </View>
+                              <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={() => deleteTask(task.id)}
+                              >
+                                <Text style={styles.deleteBtnText}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
 
-                      <View style={styles.taskBadgesRow}>
-                        <View style={[styles.badgePill, { backgroundColor: status.bg }]}>
-                          <Text style={[styles.badgePillText, { color: status.color }]}>
-                            {status.label}
-                          </Text>
-                        </View>
+                            <View style={styles.taskBadgesRow}>
+                              <View style={styles.badgePillDaily}>
+                                <Text style={styles.badgePillDailyText}>⏱ {task.effort} daily</Text>
+                              </View>
 
-                        <View style={styles.badgePillGray}>
-                          <Text style={styles.badgePillTextGray}>⏱ {task.effort}</Text>
-                        </View>
+                              <View style={styles.badgePillSlot}>
+                                <Text style={styles.badgePillSlotText}>{slotName}</Text>
+                              </View>
 
-                        <View style={styles.badgePillGray}>
-                          <Text style={styles.badgePillTextGray}>
-                            ★ {task.importance}/5 Weight
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })}
+                              {isDoneToday && (
+                                <View style={styles.badgePillSuccess}>
+                                  <Text style={styles.badgePillSuccessText}>Done Today</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                  </View>
+                )}
+
+                {/* 2. Coursework Deadlines */}
+                {incompleteTasks.some((t) => t.taskType !== 'daily_practice') && (
+                  <View style={styles.subSection}>
+                    <Text style={styles.sectionHeading}>
+                      🎓 Coursework Deadlines ({incompleteTasks.filter((t) => t.taskType !== 'daily_practice').length})
+                    </Text>
+                    {incompleteTasks
+                      .filter((t) => t.taskType !== 'daily_practice')
+                      .map((task) => {
+                        const status = getTaskStatus(task);
+                        const deadlineDate = new Date(task.deadline);
+                        const formattedDate = deadlineDate.toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        });
+                        const formattedTime = deadlineDate.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+
+                        return (
+                          <View key={task.id} style={styles.taskCard}>
+                            <View style={styles.taskCardTop}>
+                              <TouchableOpacity
+                                style={styles.taskCheckbox}
+                                onPress={() => toggleTaskCompleted(task.id)}
+                              >
+                                <Text style={styles.taskCheckboxText}>○</Text>
+                              </TouchableOpacity>
+
+                              <View style={styles.taskInfo}>
+                                <Text style={styles.taskTitle}>{task.title}</Text>
+                                <Text style={styles.taskDeadline}>
+                                  Due: {formattedDate} at {formattedTime}
+                                </Text>
+                              </View>
+
+                              <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={() => deleteTask(task.id)}
+                              >
+                                <Text style={styles.deleteBtnText}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.taskBadgesRow}>
+                              <View style={[styles.badgePill, { backgroundColor: status.bg }]}>
+                                <Text style={[styles.badgePillText, { color: status.color }]}>
+                                  {status.label}
+                                </Text>
+                              </View>
+
+                              <View style={styles.badgePillGray}>
+                                <Text style={styles.badgePillTextGray}>⏱ {task.effort}</Text>
+                              </View>
+
+                              <View style={styles.badgePillGray}>
+                                <Text style={styles.badgePillTextGray}>
+                                  ★ {task.importance}/5 Weight
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })}
+                  </View>
+                )}
               </View>
             )}
 
@@ -233,7 +311,7 @@ export const HomeScreen: React.FC = () => {
             {completedTasks.length > 0 && (
               <View style={styles.completedSection}>
                 <Text style={styles.completedHeading}>
-                  Completed ({completedTasks.length})
+                  Completed Coursework ({completedTasks.length})
                 </Text>
                 {completedTasks.map((task) => (
                   <View key={task.id} style={styles.completedCard}>
@@ -271,50 +349,6 @@ export const HomeScreen: React.FC = () => {
             </TouchableOpacity>
           </ScrollView>
         )}
-
-        {/* TAB 5: SETTINGS & TRUST */}
-        {activeTab === 'settings' && (
-          <ScrollView style={styles.tasksScroll} contentContainerStyle={styles.tasksScrollContent}>
-            <View style={styles.settingsContainer}>
-              <View style={styles.trustBox}>
-                <Text style={styles.trustTitle}>🔒 Privacy & Architecture</Text>
-                <Text style={styles.trustText}>
-                  "No ads. No data sold. Ever."
-                </Text>
-                <Text style={styles.trustDesc}>
-                  Plannr stores all coursework data strictly on this device using local storage. No network requests are made, and no AI model processes your personal deadlines.
-                </Text>
-              </View>
-
-              <View style={styles.settingsSection}>
-                <Text style={styles.settingsSectionTitle}>Algorithm Engine</Text>
-                <View style={styles.settingItem}>
-                  <Text style={styles.settingLabel}>Engine Mode</Text>
-                  <Text style={styles.settingValue}>Deterministic Priority Queue</Text>
-                </View>
-                <View style={styles.settingItem}>
-                  <Text style={styles.settingLabel}>Planning Horizon</Text>
-                  <Text style={styles.settingValue}>14 Rolling Days</Text>
-                </View>
-                <View style={styles.settingItem}>
-                  <Text style={styles.settingLabel}>Silent Autopilot</Text>
-                  <Text style={styles.settingValue}>Disabled (Propose only)</Text>
-                </View>
-                <View style={styles.settingItem}>
-                  <Text style={styles.settingLabel}>Permissions</Text>
-                  <Text style={styles.settingValue}>Zero permissions declared</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={styles.dangerBtn}
-                onPress={() => resetAllData()}
-              >
-                <Text style={styles.dangerBtnText}>Reset All Data</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        )}
       </View>
 
       {/* Floating Action Button (+ Add Task) on Today, Weekly, and Tasks */}
@@ -333,6 +367,67 @@ export const HomeScreen: React.FC = () => {
         onClose={() => setModalVisible(false)}
         onSaveTask={(task, recalculate) => addTask(task, recalculate)}
       />
+
+      {/* Settings & Trust Modal */}
+      <Modal
+        visible={settingsVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.settingsModalCard}>
+            <View style={styles.settingsModalHeader}>
+              <Text style={styles.settingsModalTitle}>⚙️ Settings & Privacy</Text>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setSettingsVisible(false)}
+              >
+                <Text style={styles.modalCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.settingsModalBody}>
+              <View style={styles.trustBox}>
+                <Text style={styles.trustTitle}>🔒 Zero Permissions & Privacy First</Text>
+                <Text style={styles.trustDesc}>
+                  Plannr stores all coursework and habits strictly on this device in local storage. No network accounts, no calendar tracking, and zero AI in the scheduling path.
+                </Text>
+              </View>
+
+              <View style={styles.settingsSection}>
+                <Text style={styles.settingsSectionTitle}>Algorithm Engine</Text>
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingLabel}>Engine Mode</Text>
+                  <Text style={styles.settingValue}>Deterministic Priority Queue</Text>
+                </View>
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingLabel}>Horizon</Text>
+                  <Text style={styles.settingValue}>14 Rolling Days</Text>
+                </View>
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingLabel}>Focus Blocks</Text>
+                  <Text style={styles.settingValue}>Max 50m + 10m break</Text>
+                </View>
+                <View style={styles.settingItem}>
+                  <Text style={styles.settingLabel}>Sequencing</Text>
+                  <Text style={styles.settingValue}>Warm-Up → Peak → Wind-Down</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.dangerBtn}
+                onPress={async () => {
+                  setSettingsVisible(false);
+                  await resetAllData();
+                }}
+              >
+                <Text style={styles.dangerBtnText}>Reset All Data (Clear Everything)</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -363,6 +458,21 @@ const styles = StyleSheet.create({
   appSubtitle: {
     fontSize: 12,
     color: '#94A3B8',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  settingsHeaderBtn: {
+    backgroundColor: '#1E293B',
+    padding: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  settingsHeaderIcon: {
+    fontSize: 16,
   },
   recalcBtn: {
     backgroundColor: '#4F46E5',
@@ -450,6 +560,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  subSection: {
+    marginBottom: 20,
+  },
   sectionHeading: {
     fontSize: 15,
     fontWeight: '700',
@@ -463,6 +576,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  taskCardDone: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    opacity: 0.85,
   },
   taskCardTop: {
     flexDirection: 'row',
@@ -479,6 +597,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10,
   },
+  taskCheckboxDone: {
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
+  },
   taskCheckboxText: {
     fontSize: 14,
     color: '#94A3B8',
@@ -487,6 +609,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#10B981',
     fontWeight: 'bold',
+  },
+  taskTitleDone: {
+    color: '#64748B',
+    textDecorationLine: 'line-through',
   },
   taskInfo: {
     flex: 1,
@@ -532,6 +658,45 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#475569',
     fontWeight: '600',
+  },
+  badgePillDaily: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  badgePillDailyText: {
+    fontSize: 11,
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  badgePillSlot: {
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  badgePillSlotText: {
+    fontSize: 11,
+    color: '#6D28D9',
+    fontWeight: '700',
+  },
+  badgePillSuccess: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  badgePillSuccessText: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '700',
   },
   completedSection: {
     marginTop: 20,
@@ -656,5 +821,56 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: '700',
     fontSize: 14,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  settingsModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '85%',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  settingsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
+  },
+  settingsModalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalCloseBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseBtnText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  settingsModalBody: {
+    padding: 20,
   },
 });

@@ -20,7 +20,7 @@ interface AppContextType {
   addTask: (task: Task, recalculate: boolean) => Promise<void>;
   updateTask: (task: Task) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
-  toggleTaskCompleted: (taskId: string) => Promise<void>;
+  toggleTaskCompleted: (taskId: string, targetDateStr?: string) => Promise<void>;
   saveTemplate: (newTemplate: RecurringTimeBlock[]) => Promise<void>;
   recalculateSchedule: () => Promise<ScheduleResult>;
   addManualOverride: (override: ScheduledSession) => Promise<void>;
@@ -124,9 +124,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await recalculateSchedule();
   };
 
-  const toggleTaskCompleted = async (taskId: string) => {
+  const toggleTaskCompleted = async (taskId: string, targetDateStr?: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+
+    if (task.taskType === 'daily_practice') {
+      const now = new Date();
+      const dateKey = targetDateStr || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const completedDates = task.completedDates || [];
+      const isCompletedToday = completedDates.includes(dateKey);
+      const updatedDates = isCompletedToday
+        ? completedDates.filter((d) => d !== dateKey)
+        : [...completedDates, dateKey];
+
+      const updatedTask: Task = { ...task, completedDates: updatedDates };
+      await updateTask(updatedTask);
+      await recalculateSchedule();
+      return;
+    }
 
     const updatedTask: Task = { ...task, completed: !task.completed };
     await updateTask(updatedTask);

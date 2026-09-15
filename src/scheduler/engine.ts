@@ -41,10 +41,12 @@ export function computeSchedule(options: ScheduleOptions): ScheduleResult {
 
   // 1. Filter incomplete tasks
   const incompleteTasks = tasks.filter((t) => !t.completed);
+  const dailyPracticeTasks = incompleteTasks.filter((t) => t.taskType === 'daily_practice');
+  const courseworkTasks = incompleteTasks.filter((t) => t.taskType !== 'daily_practice');
 
-  // 2. Separate tasks into active horizon vs beyond horizon & detect overdue tasks
+  // 2. Separate coursework tasks into active horizon vs beyond horizon & detect overdue tasks
   const activeTasks: Task[] = [];
-  for (const task of incompleteTasks) {
+  for (const task of courseworkTasks) {
     const deadlineDate = new Date(task.deadline);
     const daysUntilDeadline = calculateDaysUntilDeadline(task.deadline, currentNow);
 
@@ -115,7 +117,154 @@ export function computeSchedule(options: ScheduleOptions): ScheduleResult {
     overrideMinutesByTask.set(override.taskId, currentMinutes + override.durationMinutes);
   }
 
-  // 5. Score active tasks and sort descending by priority score
+  // 4b. Allocate recurring Daily Practice tasks across horizon days
+  const warmupTasks = dailyPracticeTasks.filter((t) => (t.preferredSlot || 'warmup') === 'warmup');
+  const winddownTasks = dailyPracticeTasks.filter((t) => t.preferredSlot === 'winddown');
+  const otherDailyTasks = dailyPracticeTasks.filter(
+    (t) => t.preferredSlot === 'peak' || t.preferredSlot === 'any'
+  );
+
+  for (let d = 0; d < horizonDays; d++) {
+    const dayStart = new Date(currentNow.getFullYear(), currentNow.getMonth(), currentNow.getDate() + d, 0, 0, 0, 0);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const dayKey = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, '0')}-${String(dayStart.getDate()).padStart(2, '0')}`;
+
+    // 1. Allocate Warm-Up tasks at the START of the day's available time
+    for (const dpTask of warmupTasks) {
+      if (dpTask.completedDates && dpTask.completedDates.includes(dayKey)) continue;
+      const neededMins = EFFORT_MINUTES[dpTask.effort];
+
+      for (let i = 0; i < availableIntervals.length; i++) {
+        const interval = availableIntervals[i];
+        if (interval.end.getTime() <= dayStart.getTime() || interval.start.getTime() >= dayEnd.getTime()) continue;
+
+        const effStartMs = Math.max(interval.start.getTime(), dayStart.getTime(), currentNow.getTime());
+        const effEndMs = Math.min(interval.end.getTime(), dayEnd.getTime());
+        const availMins = Math.round((effEndMs - effStartMs) / (1000 * 60));
+
+        if (availMins >= neededMins) {
+          const sessionStart = new Date(effStartMs);
+          const sessionEnd = new Date(effStartMs + neededMins * 60 * 1000);
+
+          const dpSessions = taskSessionsMap.get(dpTask.id) || [];
+          dpSessions.push({
+            id: `session-dp-${dpTask.id}-${dayKey}`,
+            taskId: dpTask.id,
+            taskTitle: dpTask.title,
+            startTime: sessionStart.toISOString(),
+            endTime: sessionEnd.toISOString(),
+            durationMinutes: neededMins,
+            sessionIndex: 1,
+            totalSessions: 1,
+            isManualOverride: false,
+            reason: `🔁 Daily Practice Habit • Warm-up routine to build momentum`,
+            isDailyPractice: true,
+          });
+          taskSessionsMap.set(dpTask.id, dpSessions);
+
+          availableIntervals = subtractInterval(availableIntervals, {
+            start: sessionStart,
+            end: sessionEnd,
+          });
+          break;
+        }
+      }
+    }
+
+    // 2. Allocate Wind-Down tasks at the END of the day's available time
+    for (const dpTask of winddownTasks) {
+      if (dpTask.completedDates && dpTask.completedDates.includes(dayKey)) continue;
+      const neededMins = EFFORT_MINUTES[dpTask.effort];
+
+      let lastMatchIdx = -1;
+      let lastEffEndMs = 0;
+
+      for (let i = availableIntervals.length - 1; i >= 0; i--) {
+        const interval = availableIntervals[i];
+        if (interval.end.getTime() <= dayStart.getTime() || interval.start.getTime() >= dayEnd.getTime()) continue;
+
+        const effStartMs = Math.max(interval.start.getTime(), dayStart.getTime(), currentNow.getTime());
+        const effEndMs = Math.min(interval.end.getTime(), dayEnd.getTime());
+        const availMins = Math.round((effEndMs - effStartMs) / (1000 * 60));
+
+        if (availMins >= neededMins) {
+          lastMatchIdx = i;
+          lastEffEndMs = effEndMs;
+          break;
+        }
+      }
+
+      if (lastMatchIdx !== -1) {
+        const sessionEnd = new Date(lastEffEndMs);
+        const sessionStart = new Date(lastEffEndMs - neededMins * 60 * 1000);
+
+        const dpSessions = taskSessionsMap.get(dpTask.id) || [];
+        dpSessions.push({
+          id: `session-dp-${dpTask.id}-${dayKey}`,
+          taskId: dpTask.id,
+          taskTitle: dpTask.title,
+          startTime: sessionStart.toISOString(),
+          endTime: sessionEnd.toISOString(),
+          durationMinutes: neededMins,
+          sessionIndex: 1,
+          totalSessions: 1,
+          isManualOverride: false,
+          reason: `🔁 Daily Practice Habit • Wind-down routine`,
+          isDailyPractice: true,
+        });
+        taskSessionsMap.set(dpTask.id, dpSessions);
+
+        availableIntervals = subtractInterval(availableIntervals, {
+          start: sessionStart,
+          end: sessionEnd,
+        });
+      }
+    }
+
+    // 3. Allocate other daily tasks (peak / any)
+    for (const dpTask of otherDailyTasks) {
+      if (dpTask.completedDates && dpTask.completedDates.includes(dayKey)) continue;
+      const neededMins = EFFORT_MINUTES[dpTask.effort];
+
+      for (let i = 0; i < availableIntervals.length; i++) {
+        const interval = availableIntervals[i];
+        if (interval.end.getTime() <= dayStart.getTime() || interval.start.getTime() >= dayEnd.getTime()) continue;
+
+        const effStartMs = Math.max(interval.start.getTime(), dayStart.getTime(), currentNow.getTime());
+        const effEndMs = Math.min(interval.end.getTime(), dayEnd.getTime());
+        const availMins = Math.round((effEndMs - effStartMs) / (1000 * 60));
+
+        if (availMins >= neededMins) {
+          const sessionStart = new Date(effStartMs);
+          const sessionEnd = new Date(effStartMs + neededMins * 60 * 1000);
+
+          const dpSessions = taskSessionsMap.get(dpTask.id) || [];
+          dpSessions.push({
+            id: `session-dp-${dpTask.id}-${dayKey}`,
+            taskId: dpTask.id,
+            taskTitle: dpTask.title,
+            startTime: sessionStart.toISOString(),
+            endTime: sessionEnd.toISOString(),
+            durationMinutes: neededMins,
+            sessionIndex: 1,
+            totalSessions: 1,
+            isManualOverride: false,
+            reason: `🔁 Daily Practice Habit • Consistency and steady practice`,
+            isDailyPractice: true,
+          });
+          taskSessionsMap.set(dpTask.id, dpSessions);
+
+          availableIntervals = subtractInterval(availableIntervals, {
+            start: sessionStart,
+            end: sessionEnd,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // 5. Score active coursework tasks and sort descending by priority score
   const scoredTasks = activeTasks.map((task) => {
     const score = calculatePriorityScore(task, currentNow);
     const days = calculateDaysUntilDeadline(task.deadline, currentNow);
@@ -274,6 +423,47 @@ export function computeSchedule(options: ScheduleOptions): ScheduleResult {
 
   // Sort all scheduled sessions chronologically
   allSessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+  // 9. Cognitive Time-Slot Sequencing & Explanation
+  // Group sessions by day and assign optimal sequencing labels and reasons
+  const sessionsByDay = new Map<string, ScheduledSession[]>();
+  for (const session of allSessions) {
+    const dayKey = new Date(session.startTime).toDateString();
+    const list = sessionsByDay.get(dayKey) || [];
+    list.push(session);
+    sessionsByDay.set(dayKey, list);
+  }
+
+  sessionsByDay.forEach((daySessions) => {
+    daySessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    const N = daySessions.length;
+    daySessions.forEach((s, idx) => {
+      s.sequenceRank = idx + 1;
+
+      if (s.isOverdue) {
+        s.sequenceLabel = `🚨 Slot ${idx + 1}: Immediate Priority`;
+        s.sequenceReason = 'Overdue task must be tackled first to prevent further academic penalties.';
+      } else if (idx === 0 && s.isDailyPractice) {
+        s.sequenceLabel = `🌅 Slot ${idx + 1}: Warm-Up Flow`;
+        s.sequenceReason = `Start your study session with an accessible win (${s.durationMinutes}m practice) to overcome procrastination and build momentum.`;
+      } else if (idx === 0 || (idx === 1 && daySessions[0].isDailyPractice)) {
+        s.sequenceLabel = `🎯 Slot ${idx + 1}: Peak Focus (Deep Work)`;
+        s.sequenceReason = 'Tackle your highest-stakes, cognitively demanding coursework when mental stamina and freshness are peak.';
+      } else if (s.totalSessions > 1 && s.sessionIndex > 1) {
+        s.sequenceLabel = `🔥 Slot ${idx + 1}: Deep Work Continuation`;
+        s.sequenceReason = `Continuation block (Part ${s.sessionIndex} of ${s.totalSessions}) after a break while concepts are fresh in working memory.`;
+      } else if (idx === N - 1 && (s.isDailyPractice || N >= 3)) {
+        s.sequenceLabel = `🌙 Slot ${idx + 1}: Wind-Down Slot`;
+        s.sequenceReason = 'Lower cognitive load session placed towards the end of your study time to wind down without burnout.';
+      } else if (s.isDailyPractice) {
+        s.sequenceLabel = `🔁 Slot ${idx + 1}: Daily Habit Practice`;
+        s.sequenceReason = `Daily consistency habit (${s.durationMinutes}m) to maintain skills and steady progress.`;
+      } else {
+        s.sequenceLabel = `⚡ Slot ${idx + 1}: Focused Study Block`;
+        s.sequenceReason = 'Scheduled focus block packed into your evening study time.';
+      }
+    });
+  });
 
   return {
     sessions: allSessions,

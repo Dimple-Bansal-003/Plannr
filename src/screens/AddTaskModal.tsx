@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { EffortPreset, Task } from '../scheduler/types';
+import { EffortPreset, SlotPreference, Task } from '../scheduler/types';
 
 interface AddTaskModalProps {
   visible: boolean;
@@ -41,6 +41,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
   onClose,
   onSaveTask,
 }) => {
+  const [taskType, setTaskType] = useState<'coursework' | 'daily_practice'>('coursework');
+  const [preferredSlot, setPreferredSlot] = useState<SlotPreference>('warmup');
   const [title, setTitle] = useState('');
   const [effort, setEffort] = useState<EffortPreset>('1hr');
   const [importance, setImportance] = useState<1 | 2 | 3 | 4 | 5>(3);
@@ -63,16 +65,33 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     }
     setErrorMsg('');
 
-    const deadline = calculateDeadlineDate(daysOffset, dueHour, dueMinute);
-    const newTask: Task = {
-      id: `task-${Date.now()}`,
-      title: title.trim(),
-      deadline: deadline.toISOString(),
-      effort,
-      importance,
-      completed: false,
-      createdAt: new Date().toISOString(),
-    };
+    let newTask: Task;
+    if (taskType === 'daily_practice') {
+      newTask = {
+        id: `task-dp-${Date.now()}`,
+        title: title.trim(),
+        deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        effort,
+        importance: 3,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        taskType: 'daily_practice',
+        preferredSlot,
+        completedDates: [],
+      };
+    } else {
+      const deadline = calculateDeadlineDate(daysOffset, dueHour, dueMinute);
+      newTask = {
+        id: `task-${Date.now()}`,
+        title: title.trim(),
+        deadline: deadline.toISOString(),
+        effort,
+        importance,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        taskType: 'coursework',
+      };
+    }
 
     onSaveTask(newTask, recalculate);
     // Reset
@@ -82,6 +101,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
     setDaysOffset(1);
     setDueHour(23);
     setDueMinute(59);
+    setTaskType('coursework');
+    setPreferredSlot('warmup');
     onClose();
   };
 
@@ -114,12 +135,44 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
           </View>
 
           <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
+            {/* Task Type Switcher */}
+            <View style={styles.typeSelectorRow}>
+              <TouchableOpacity
+                style={[styles.typeBtn, taskType === 'coursework' && styles.typeBtnActive]}
+                onPress={() => setTaskType('coursework')}
+              >
+                <Text style={[styles.typeBtnText, taskType === 'coursework' && styles.typeBtnTextActive]}>
+                  🎓 Coursework Deadline
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.typeBtn, taskType === 'daily_practice' && styles.typeBtnActive]}
+                onPress={() => {
+                  setTaskType('daily_practice');
+                  if (effort === 'half-day' || effort === 'full-day') {
+                    setEffort('30min');
+                  }
+                }}
+              >
+                <Text style={[styles.typeBtnText, taskType === 'daily_practice' && styles.typeBtnTextActive]}>
+                  🔁 Daily Practice Habit
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Title Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Task Title</Text>
+              <Text style={styles.label}>
+                {taskType === 'daily_practice' ? 'Daily Habit / Practice Name' : 'Task Title'}
+              </Text>
               <TextInput
                 style={[styles.textInput, errorMsg ? styles.textInputError : null]}
-                placeholder="e.g., DBMS Assignment 3, Calculus Midterm"
+                placeholder={
+                  taskType === 'daily_practice'
+                    ? 'e.g., LeetCode / DSA Practice, French Vocabulary, Reading'
+                    : 'e.g., DBMS Assignment 3, Calculus Midterm'
+                }
                 placeholderTextColor="#94A3B8"
                 value={title}
                 onChangeText={(text) => {
@@ -131,14 +184,60 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
               {errorMsg ? <Text style={styles.errorText}>{errorMsg}</Text> : null}
             </View>
 
-            {/* Deadline Selector */}
-            <View style={styles.inputGroup}>
-              <View style={styles.deadlineHeaderRow}>
-                <Text style={styles.label}>Deadline</Text>
-                <Text style={[styles.deadlinePreviewText, isOverdue && styles.deadlineOverdueText]}>
-                  {isOverdue ? `🚨 OVERDUE: ${formattedDeadline}` : formattedDeadline}
-                </Text>
+            {/* If Daily Practice: Slot & Sequence Suggestion */}
+            {taskType === 'daily_practice' && (
+              <View style={styles.inputGroup}>
+                <View style={styles.labelWithHint}>
+                  <Text style={styles.label}>Suggested Daily Slot</Text>
+                  <Text style={styles.hint}>Where in your study time to place it</Text>
+                </View>
+                <View style={styles.slotOptionList}>
+                  {[
+                    {
+                      key: 'warmup',
+                      label: '🌅 Warm-Up First (Recommended)',
+                      desc: 'Start your study session with a quick win to overcome procrastination and build momentum.',
+                    },
+                    {
+                      key: 'peak',
+                      label: '🎯 Peak Focus (Deep Work)',
+                      desc: 'Tackle during peak mental stamina hours.',
+                    },
+                    {
+                      key: 'winddown',
+                      label: '🌙 Wind-Down Slot',
+                      desc: 'Wrap up your evening with lower cognitive demand practice.',
+                    },
+                  ].map((slot) => {
+                    const selected = preferredSlot === slot.key;
+                    return (
+                      <TouchableOpacity
+                        key={slot.key}
+                        style={[styles.slotCard, selected && styles.slotCardSelected]}
+                        onPress={() => setPreferredSlot(slot.key as SlotPreference)}
+                      >
+                        <Text style={[styles.slotTitle, selected && styles.slotTitleSelected]}>
+                          {slot.label}
+                        </Text>
+                        <Text style={[styles.slotDesc, selected && styles.slotDescSelected]}>
+                          {slot.desc}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
+            )}
+
+            {/* Deadline Selector (Coursework only) */}
+            {taskType === 'coursework' && (
+              <View style={styles.inputGroup}>
+                <View style={styles.deadlineHeaderRow}>
+                  <Text style={styles.label}>Deadline</Text>
+                  <Text style={[styles.deadlinePreviewText, isOverdue && styles.deadlineOverdueText]}>
+                    {isOverdue ? `🚨 OVERDUE: ${formattedDeadline}` : formattedDeadline}
+                  </Text>
+                </View>
 
               {/* Quick Presets (including 11:59 PM, 25 days, and overdue test) */}
               <View style={styles.quickDeadlineRow}>
@@ -240,16 +339,24 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
                 </View>
               </View>
             </View>
+            )}
 
-            {/* Effort Preset Selector (6 Presets with focus block indicators) */}
+            {/* Effort Preset Selector */}
             <View style={styles.inputGroup}>
               <View style={styles.labelWithHint}>
-                <Text style={styles.label}>Estimated Effort</Text>
-                <Text style={styles.hint}>Large blocks split with breaks</Text>
+                <Text style={styles.label}>
+                  {taskType === 'daily_practice' ? 'Daily Practice Duration' : 'Estimated Effort'}
+                </Text>
+                <Text style={styles.hint}>
+                  {taskType === 'daily_practice' ? 'Reserved daily in your free time' : 'Large blocks split with breaks'}
+                </Text>
               </View>
 
               <View style={styles.grid2Col}>
-                {EFFORT_OPTIONS.map((opt) => {
+                {(taskType === 'daily_practice'
+                  ? EFFORT_OPTIONS.filter((o) => o.key !== 'half-day' && o.key !== 'full-day')
+                  : EFFORT_OPTIONS
+                ).map((opt) => {
                   const selected = effort === opt.key;
                   return (
                     <TouchableOpacity
@@ -269,43 +376,45 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({
               </View>
             </View>
 
-            {/* Importance (1-5 Syllabus Weightage) */}
-            <View style={styles.inputGroup}>
-              <View style={styles.labelWithHint}>
-                <Text style={styles.label}>Syllabus Weightage / Importance</Text>
-                <Text style={styles.hint}>Higher = scheduled sooner</Text>
-              </View>
+            {/* Importance (Coursework only: 1-5 Syllabus Weightage) */}
+            {taskType === 'coursework' && (
+              <View style={styles.inputGroup}>
+                <View style={styles.labelWithHint}>
+                  <Text style={styles.label}>Syllabus Weightage / Importance</Text>
+                  <Text style={styles.hint}>Higher = scheduled sooner</Text>
+                </View>
 
-              <View style={styles.importanceList}>
-                {IMPORTANCE_LEVELS.map((imp) => {
-                  const selected = importance === imp.level;
-                  return (
-                    <TouchableOpacity
-                      key={imp.level}
-                      style={[styles.importanceRow, selected && styles.importanceRowSelected]}
-                      onPress={() => setImportance(imp.level)}
-                    >
-                      <Text
-                        style={[
-                          styles.importanceLabel,
-                          selected && styles.importanceLabelSelected,
-                        ]}
+                <View style={styles.importanceList}>
+                  {IMPORTANCE_LEVELS.map((imp) => {
+                    const selected = importance === imp.level;
+                    return (
+                      <TouchableOpacity
+                        key={imp.level}
+                        style={[styles.importanceRow, selected && styles.importanceRowSelected]}
+                        onPress={() => setImportance(imp.level)}
                       >
-                        {imp.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.importanceHint,
-                          selected && styles.importanceHintSelected,
-                        ]}
-                      >
-                        {imp.weightHint}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.importanceLabel,
+                            selected && styles.importanceLabelSelected,
+                          ]}
+                        >
+                          {imp.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.importanceHint,
+                            selected && styles.importanceHintSelected,
+                          ]}
+                        >
+                          {imp.weightHint}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-            </View>
+            )}
           </ScrollView>
 
           {/* Action Buttons */}
@@ -366,6 +475,67 @@ const styles = StyleSheet.create({
   },
   bodyContent: {
     padding: 20,
+  },
+  typeSelectorRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 20,
+  },
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  typeBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  typeBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  typeBtnTextActive: {
+    color: '#4F46E5',
+    fontWeight: '700',
+  },
+  slotOptionList: {
+    gap: 8,
+  },
+  slotCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  slotCardSelected: {
+    borderColor: '#4F46E5',
+    backgroundColor: '#EEF2FF',
+  },
+  slotTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  slotTitleSelected: {
+    color: '#4F46E5',
+  },
+  slotDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  slotDescSelected: {
+    color: '#4338CA',
   },
   inputGroup: {
     marginBottom: 20,

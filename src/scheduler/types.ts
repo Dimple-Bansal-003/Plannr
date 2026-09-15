@@ -13,14 +13,19 @@ export const EFFORT_MINUTES: Record<EffortPreset, number> = {
 export const MAX_FOCUS_BLOCK_MINUTES = 50;
 export const SUGGESTED_BREAK_MINUTES = 10;
 
+export type SlotPreference = 'warmup' | 'peak' | 'winddown' | 'any';
+
 export interface Task {
   id: string;
   title: string;
-  deadline: string; // ISO 8601 string
+  deadline: string; // ISO 8601 string (for daily_practice, placeholder / ongoing)
   effort: EffortPreset;
   importance: 1 | 2 | 3 | 4 | 5; // syllabus weightage (1 to 5)
   completed: boolean;
   createdAt: string;
+  taskType?: 'coursework' | 'daily_practice';
+  preferredSlot?: SlotPreference;
+  completedDates?: string[]; // Date strings (YYYY-MM-DD) when this daily practice was completed
 }
 
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -52,6 +57,10 @@ export interface ScheduledSession {
   reason?: string;              // Deterministic reasoning (e.g. "Scheduled first: due in 1.2d, weighted 4/5")
   isOverdue?: boolean;          // True if the parent task deadline is already past
   breakAfterMinutes?: number;   // e.g. 10 minutes break suggested after a 50m block
+  isDailyPractice?: boolean;
+  sequenceRank?: number;        // 1, 2, 3... in chronological sequence for that day
+  sequenceLabel?: string;       // e.g. "🌅 Warm-up Flow", "🎯 Peak Focus", "🔥 Deep Work", "🌙 Wind-down"
+  sequenceReason?: string;      // Pedagogical explanation of why this session is placed in this slot
 }
 
 export interface AtRiskTaskInfo {

@@ -59,8 +59,20 @@ export const SessionCard: React.FC<SessionCardProps> = ({
           )}
         </View>
 
-        {/* Badges: duration, split part */}
+        {/* Badges: sequence, daily practice, duration, split part */}
         <View style={styles.metaRow}>
+          {session.sequenceLabel && (
+            <View style={styles.sequenceBadge}>
+              <Text style={styles.sequenceText}>{session.sequenceLabel}</Text>
+            </View>
+          )}
+
+          {session.isDailyPractice && (
+            <View style={styles.dailyBadge}>
+              <Text style={styles.dailyText}>🔁 Daily Practice</Text>
+            </View>
+          )}
+
           <View style={styles.durationBadge}>
             <Text style={styles.durationText}>⏱ {formatDuration(session.durationMinutes)} focus</Text>
           </View>
@@ -86,6 +98,16 @@ export const SessionCard: React.FC<SessionCardProps> = ({
             <Text style={styles.reasonIcon}>💡</Text>
             <Text style={[styles.reasonText, session.isOverdue && styles.reasonTextOverdue]}>
               {session.reason}
+            </Text>
+          </View>
+        )}
+
+        {/* Cognitive Sequencing Reason */}
+        {session.sequenceReason && (
+          <View style={styles.sequenceReasonBox}>
+            <Text style={styles.sequenceReasonIcon}>✨</Text>
+            <Text style={styles.sequenceReasonText}>
+              {session.sequenceReason}
             </Text>
           </View>
         )}
@@ -211,6 +233,32 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 8,
   },
+  sequenceBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  sequenceText: {
+    fontSize: 11,
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  dailyBadge: {
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  dailyText: {
+    fontSize: 11,
+    color: '#15803D',
+    fontWeight: '700',
+  },
   durationBadge: {
     backgroundColor: '#F1F5F9',
     paddingHorizontal: 8,
@@ -273,6 +321,29 @@ const styles = StyleSheet.create({
   reasonTextOverdue: {
     color: '#B91C1C',
     fontWeight: '600',
+  },
+  sequenceReasonBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0F9FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  sequenceReasonIcon: {
+    fontSize: 11,
+    marginRight: 4,
+    marginTop: 1,
+  },
+  sequenceReasonText: {
+    fontSize: 11,
+    color: '#0369A1',
+    flex: 1,
+    lineHeight: 15,
+    fontStyle: 'italic',
   },
   actionsRow: {
     flexDirection: 'row',
